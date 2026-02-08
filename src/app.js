@@ -18,12 +18,31 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 // CORS configuration
-app.use(cors({
-  origin: env.CORS_ORIGIN,
-  credentials: true,
+const corsOriginEnv = (env.CORS_ORIGIN || '*').trim();
+const isWildcardOrigin = corsOriginEnv === '*';
+const allowedOrigins = isWildcardOrigin
+  ? []
+  : corsOriginEnv.split(',').map((origin) => origin.trim()).filter(Boolean);
+
+const corsOptions = {
+  origin: isWildcardOrigin
+    ? '*'
+    : (origin, callback) => {
+      // Allow non-browser requests (curl, server-to-server) with no Origin header
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`CORS: Origin not allowed: ${origin}`));
+    },
+  // Wildcard origins are incompatible with credentials=true
+  credentials: !isWildcardOrigin,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
-}));
+};
+
+app.use(cors(corsOptions));
+
+// Explicitly handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
